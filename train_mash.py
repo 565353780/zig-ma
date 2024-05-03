@@ -13,12 +13,11 @@ import torch.distributed as dist
 from tqdm import tqdm
 from einops import rearrange
 from omegaconf import OmegaConf
+from torch.utils.data import DataLoader
 from diffusers.models import AutoencoderKL
 from diffusers import StableDiffusionPipeline
 from copy import deepcopy
 from time import time
-
-from datasets.wds_dataloader import WebDataModuleFromConfig
 
 from utils.train_utils import (
     create_logger,
@@ -37,6 +36,7 @@ from hydra.core.hydra_config import HydraConfig
 from wandb_utils import array2grid_pixel, get_max_ckpt_from_dir
 
 from zig_ma.Metric.my import MyMetric
+from zig_ma.Dataset.mash import MashDataset
 
 
 def out2img(samples):
@@ -109,6 +109,10 @@ def init_zs(args, device, in_channels, input_size):
 
 @hydra.main(config_path="config", config_name="default", version_base=None)
 def main(args):
+    dataset_folder_path = '/home/chli/Dataset/'
+    global_batch_size = 100
+    num_workers = 16
+
     assert torch.cuda.is_available(), "Training currently requires at least one GPU."
     from accelerate.utils import AutocastKwargs
 
@@ -117,7 +121,7 @@ def main(args):
     # https://github.com/huggingface/accelerate/issues/2487#issuecomment-1969997224
 
     accelerator = accelerate.Accelerator(
-        kwargs_handlers=[kwargs], mixed_precision=args.mixed_precision
+        kwargs_handlers=[kwargs], mixed_precision='fp16'
     )
     device = accelerator.device
     accelerate.utils.set_seed(args.global_seed, device_specific=True)
@@ -241,8 +245,18 @@ def main(args):
 
     logger.info(f"#parameters: {sum(p.numel() for p in model.parameters()):,}")
 
-    datamod = WebDataModuleFromConfig(**args.data)
-    loader = datamod.train_dataloader()
+    # datamod = WebDataModuleFromConfig(**args.data)
+    # loader = datamod.train_dataloader()
+
+    dataset = MashDataset(dataset_folder_path)
+    loader = DataLoader(
+        dataset,
+        batch_size=int(global_batch_size // accelerator.num_processes),
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=True,
+        drop_last=False,
+    )
 
     loader, opt, model, ema_model = accelerator.prepare(loader, opt, model, ema_model)
 

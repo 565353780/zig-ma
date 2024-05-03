@@ -14,7 +14,8 @@ import os
 import re
 
 from datasets.wds_dataloader import WebDataModuleFromConfig
-from model_zigma import get_2d_sincos_pos_embed
+
+from zig_ma.Model.zigma import get_2d_sincos_pos_embed
 
 
 def is_main_process():
