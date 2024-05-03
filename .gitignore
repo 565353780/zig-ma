@@ -9,3 +9,8 @@ samples/
 example_2d.png
 peano_curve.png
 dis_mamba/
+
+# compiled
+build
+*.egg-info
+*.so
